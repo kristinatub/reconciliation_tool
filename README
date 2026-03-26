@@ -1,0 +1,92 @@
+# Epic Trading — Reconciliation Tool
+
+This is a CLI tool that compares Epic Trading's internal trade ledger against the bank's end-of-day settlement report, surfacing every data integrity issue across both files.
+
+
+## Requirements
+
+- Python 3.8+
+
+
+## How to Run
+
+python3 reconcile_trades.py
+
+
+Exit codes:
+- `0` — fully reconciled, no discrepancies
+- `1` — one or more discrepancies found
+
+---
+
+## Matching Logic
+
+For each trade present in both files, the tool computes the **expected settlement** from the ledger:
+
+```
+expected_settlement = (quantity × price) + fee
+```
+
+This is compared against `amount_settled` in the bank CSV. The tool checks **both directions**:
+
+1. **Ledger → Bank**: flags trades missing from the bank file or with a mismatched amount
+2. **Bank → Ledger**: flags bank records with no corresponding ledger entry
+
+---
+
+## Discrepancy Types
+
+| Type | Description |
+|---|---|
+| `AMOUNT_MISMATCH` | Trade exists in both files but settled amounts differ |
+| `MISSING_IN_BANK` | Trade is in the ledger but absent from the bank file |
+| `MISSING_IN_LEDGER` | Bank record exists with no matching ledger entry |
+
+---
+
+## Output — Results with Provided Files
+
+```
+────────────────────────────────────────────────────────────────────────
+  EPIC TRADING — RECONCILIATION REPORT
+────────────────────────────────────────────────────────────────────────
+  Ledger trades : 18
+  Bank records  : 18
+  Total issues  : 4
+
+[AMOUNT MISMATCHES]  (2 found)
+────────────────────────────────────────────────────────────────────────
+  Trade ID     Symbol       Expected   Bank Settled        Delta
+  ──────────── ──────── ──────────── ────────────── ────────────
+  TRD-002      TSLA      $  3,510.00    $  3,500.00  $    -10.00
+  TRD-014      SHOP      $    560.00    $    500.00  $    -60.00
+
+[MISSING IN BANK]  (1 found)
+────────────────────────────────────────────────────────────────────────
+  Trade ID     Symbol    Expected Settlement
+  ──────────── ──────── ────────────────────
+  TRD-011      INTC              $  3,010.00
+
+[MISSING IN LEDGER]  (1 found)
+────────────────────────────────────────────────────────────────────────
+  Trade ID      Bank Amount Settled
+  ──────────── ────────────────────
+  TRD-020               $    500.00
+
+────────────────────────────────────────────────────────────────────────
+  SUMMARY
+────────────────────────────────────────────────────────────────────────
+  Amount mismatches      : 2
+  Missing in bank        : 1
+  Missing in ledger      : 1
+────────────────────────────────────────────────────────────────────────
+```
+
+### Findings Breakdown
+
+| Issue | Trade | Detail |
+|---|---|---|
+| Amount Mismatch | TRD-002 (TSLA) | Ledger expects $3,510.00 (5 × $700 + $10 fee). Bank settled $3,500.00. **Delta: -$10.00** — fee likely not included by bank. |
+| Amount Mismatch | TRD-014 (SHOP) | Ledger expects $560.00 (10 × $55 + $10 fee). Bank settled $500.00. **Delta: -$60.00** — fee excluded and possible price discrepancy. |
+| Missing in Bank | TRD-011 (INTC) | Ledger shows a $3,010.00 trade. No corresponding bank settlement record exists. |
+| Missing in Ledger | TRD-020 | Bank has a $500.00 settlement entry with no matching internal ledger record — potential ghost trade. |
